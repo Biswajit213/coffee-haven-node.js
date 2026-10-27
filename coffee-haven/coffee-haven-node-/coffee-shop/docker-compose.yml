@@ -1,0 +1,58 @@
+# ─────────────────────────────────────────────────────
+# Coffee Haven — Docker Compose
+# Usage:
+#   cp .env.example .env   (fill in credentials)
+#   docker compose up --build
+# ─────────────────────────────────────────────────────
+
+services:
+  # ── MongoDB ───────────────────────────────────────
+  mongo:
+    image: mongo:7
+    container_name: coffeehaven-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ── Backend API ───────────────────────────────────
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: coffeehaven-server
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - MONGO_URI=${MONGO_URI:-mongodb://mongo:27017/coffeehaven}
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  # ── Frontend (Nginx) ─────────────────────────────
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000/api}
+    container_name: coffeehaven-client
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - server
+
+volumes:
+  mongo_data:
+    driver: local
